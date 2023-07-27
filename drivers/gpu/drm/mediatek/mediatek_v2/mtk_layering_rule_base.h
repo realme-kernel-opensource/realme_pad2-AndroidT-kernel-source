@@ -45,13 +45,18 @@
 /* bpp x uint weight = 2 x 100 */
 #define HRT_AEE_WEIGHT 200
 #define HRT_ROUND_CORNER_WEIGHT 200
-
+#define HRT_PAPER_MODE_WEIGHT 200
 #define HRT_GET_FIRST_SET_BIT(n) (((n) - ((n) & ((n) - 1))))
+
+#define DISP_MML_CAPS_MASK                                                                         \
+	(MTK_MML_DISP_DIRECT_LINK_LAYER | MTK_MML_DISP_DIRECT_DECOUPLE_LAYER |                     \
+	 MTK_MML_DISP_DECOUPLE_LAYER | MTK_MML_DISP_MDP_LAYER)
 
 enum HRT_DISP_TYPE {
 	HRT_PRIMARY = 0,
 	HRT_SECONDARY,
 	HRT_THIRD,
+	HRT_FOURTH,
 	HRT_DISP_TYPE_NUM,
 };
 
@@ -118,6 +123,7 @@ struct hrt_sort_entry {
 	struct drm_mtk_layer_config *layer_info;
 	int key;
 	int overlap_w;
+	int idx;
 };
 
 struct layering_rule_info_t {
@@ -128,6 +134,7 @@ struct layering_rule_info_t {
 	int hrt_sys_state;
 	int wrot_sram;
 	unsigned int hrt_idx;
+	bool litepq;
 };
 
 enum SCN_FACTOR {
@@ -154,6 +161,7 @@ struct layering_rule_ops {
 		struct drm_device *dev,
 		struct drm_mtk_layering_info *disp_info);
 	bool (*rollback_all_to_GPU_for_idle)(struct drm_device *dev);
+	bool (*rollback_to_new_hrt_for_paper_mode)(struct drm_device *dev, unsigned int hrt_idx);
 	/* for fbdc */
 	void (*fbdc_pre_calculate)(struct drm_mtk_layering_info *disp_info);
 	void (*fbdc_adjust_layout)(struct drm_mtk_layering_info *disp_info,
@@ -217,6 +225,10 @@ bool mtk_is_layer_id_valid(struct drm_mtk_layering_info *disp_info,
 			   int disp_idx, int i);
 int mtk_layering_rule_ioctl(struct drm_device *drm, void *data,
 	struct drm_file *file_priv);
+#if IS_ENABLED(CONFIG_COMPAT)
+int mtk_layering_rule_ioctl_compat(struct file *file, unsigned int cmd,
+	unsigned long arg);
+#endif
 
 bool is_triple_disp(struct drm_mtk_layering_info *disp_info);
 inline bool mtk_drm_has_valid_layer(void);

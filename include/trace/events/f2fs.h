@@ -746,6 +746,81 @@ TRACE_EVENT(f2fs_gc_end,
 		__entry->prefree_seg)
 );
 
+#ifdef CONFIG_DEVICE_XCOPY
+TRACE_EVENT(f2fs_xcopy_send,
+
+	TP_PROTO(struct super_block *sb, int gc_type, unsigned int segno,
+			unsigned long i_ino, int i, block_t src, block_t dst),
+
+	TP_ARGS(sb, gc_type, segno, i_ino, i, src, dst),
+
+	TP_STRUCT__entry(
+		__field(dev_t,		dev)
+		__field(int,		gc_type)
+		__field(unsigned int, segno)
+		__field(unsigned long,	i_ino)
+		__field(int,	i)
+		__field(block_t,	src)
+		__field(block_t,	dst)
+	),
+
+	TP_fast_assign(
+		__entry->dev		= sb->s_dev;
+		__entry->gc_type		= gc_type;
+		__entry->segno	= segno;
+		__entry->i_ino	= i_ino;
+		__entry->i	= i;
+		__entry->src	= src;
+		__entry->dst	= dst;
+	),
+
+	TP_printk("dev = (%d,%d), gc_type = %d, segno = %u, ino = %u, "
+		"i = %d, src = 0x%x, dst = 0x%x",
+		show_dev(__entry->dev),
+		__entry->gc_type,
+		__entry->segno,
+		__entry->i_ino,
+		__entry->i,
+		__entry->src,
+		__entry->dst)
+);
+
+TRACE_EVENT(f2fs_xcopy_submit,
+
+	TP_PROTO(struct super_block *sb, int gc_type, unsigned int segno,
+			  int i, block_t src, block_t dst),
+
+	TP_ARGS(sb, gc_type, segno, i, src, dst),
+
+	TP_STRUCT__entry(
+		__field(dev_t,		dev)
+		__field(int,		gc_type)
+		__field(unsigned int, segno)
+		__field(int,	i)
+		__field(block_t,	src)
+		__field(block_t,	dst)
+	),
+
+	TP_fast_assign(
+		__entry->dev		= sb->s_dev;
+		__entry->gc_type		= gc_type;
+		__entry->segno	= segno;
+		__entry->i	= i;
+		__entry->src	= src;
+		__entry->dst	= dst;
+	),
+
+	TP_printk("dev = (%d,%d), gc_type = %d, segno = %u, "
+		"i = %d, src = 0x%x, dst = 0x%x",
+		show_dev(__entry->dev),
+		__entry->gc_type,
+		__entry->segno,
+		__entry->i,
+		__entry->src,
+		__entry->dst)
+);
+#endif
+
 TRACE_EVENT(f2fs_get_victim,
 
 	TP_PROTO(struct super_block *sb, int type, int gc_type,
@@ -807,20 +882,20 @@ TRACE_EVENT(f2fs_lookup_start,
 	TP_STRUCT__entry(
 		__field(dev_t,	dev)
 		__field(ino_t,	ino)
-		__field(const char *,	name)
+		__string(name,	dentry->d_name.name)
 		__field(unsigned int, flags)
 	),
 
 	TP_fast_assign(
 		__entry->dev	= dir->i_sb->s_dev;
 		__entry->ino	= dir->i_ino;
-		__entry->name	= dentry->d_name.name;
+		__assign_str(name, dentry->d_name.name);
 		__entry->flags	= flags;
 	),
 
 	TP_printk("dev = (%d,%d), pino = %lu, name:%s, flags:%u",
 		show_dev_ino(__entry),
-		__entry->name,
+		__get_str(name),
 		__entry->flags)
 );
 
@@ -834,7 +909,7 @@ TRACE_EVENT(f2fs_lookup_end,
 	TP_STRUCT__entry(
 		__field(dev_t,	dev)
 		__field(ino_t,	ino)
-		__field(const char *,	name)
+		__string(name,	dentry->d_name.name)
 		__field(nid_t,	cino)
 		__field(int,	err)
 	),
@@ -842,14 +917,14 @@ TRACE_EVENT(f2fs_lookup_end,
 	TP_fast_assign(
 		__entry->dev	= dir->i_sb->s_dev;
 		__entry->ino	= dir->i_ino;
-		__entry->name	= dentry->d_name.name;
+		__assign_str(name, dentry->d_name.name);
 		__entry->cino	= ino;
 		__entry->err	= err;
 	),
 
 	TP_printk("dev = (%d,%d), pino = %lu, name:%s, ino:%u, err:%d",
 		show_dev_ino(__entry),
-		__entry->name,
+		__get_str(name),
 		__entry->cino,
 		__entry->err)
 );

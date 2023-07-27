@@ -548,6 +548,38 @@ static ssize_t queue_dax_show(struct request_queue *q, char *page)
 	return queue_var_show(blk_queue_dax(q), page);
 }
 
+#ifdef CONFIG_DEVICE_XCOPY
+static ssize_t queue_max_copy_blks_show(struct request_queue *q, char *page)
+{
+	struct para_limit *limit = (struct para_limit *) q->limits.android_kabi_reserved1;
+
+	if (limit ==  NULL)
+		return sprintf(page, "not support\n");
+
+	return queue_var_show(limit->max_copy_blks, page);
+}
+
+static ssize_t queue_min_copy_blks_show(struct request_queue *q, char *page)
+{
+	struct para_limit *limit = (struct para_limit *) q->limits.android_kabi_reserved1;
+
+	if (limit ==  NULL)
+		return sprintf(page, "not support\n");
+
+	return queue_var_show(limit->min_copy_blks, page);
+}
+
+static ssize_t queue_max_copy_entr_show(struct request_queue *q, char *page)
+{
+	struct para_limit *limit = (struct para_limit *) q->limits.android_kabi_reserved1;
+
+	if (limit ==  NULL)
+		return sprintf(page, "not support\n");
+
+	return queue_var_show(limit->max_copy_entr, page);
+}
+#endif
+
 #define QUEUE_RO_ENTRY(_prefix, _name)			\
 static struct queue_sysfs_entry _prefix##_entry = {	\
 	.attr	= { .name = _name, .mode = 0444 },	\
@@ -616,6 +648,12 @@ QUEUE_RW_ENTRY(queue_iostats, "iostats");
 QUEUE_RW_ENTRY(queue_random, "add_random");
 QUEUE_RW_ENTRY(queue_stable_writes, "stable_writes");
 
+#ifdef CONFIG_DEVICE_XCOPY
+QUEUE_RO_ENTRY(queue_max_copy_blks, "max_copy_blks");
+QUEUE_RO_ENTRY(queue_min_copy_blks, "min_copy_blks");
+QUEUE_RO_ENTRY(queue_max_copy_entr, "max_copy_entr");
+#endif
+
 static struct attribute *queue_attrs[] = {
 	&queue_requests_entry.attr,
 	&queue_ra_entry.attr,
@@ -658,6 +696,11 @@ static struct attribute *queue_attrs[] = {
 	&queue_io_timeout_entry.attr,
 #ifdef CONFIG_BLK_DEV_THROTTLING_LOW
 	&blk_throtl_sample_time_entry.attr,
+#endif
+#ifdef CONFIG_DEVICE_XCOPY
+	&queue_max_copy_blks_entry.attr,
+	&queue_min_copy_blks_entry.attr,
+	&queue_max_copy_entr_entry.attr,
 #endif
 	NULL,
 };
@@ -958,15 +1001,17 @@ void blk_unregister_queue(struct gendisk *disk)
 	 */
 	if (queue_is_mq(q))
 		blk_mq_unregister_dev(disk_to_dev(disk), q);
-
-	kobject_uevent(&q->kobj, KOBJ_REMOVE);
-	kobject_del(&q->kobj);
 	blk_trace_remove_sysfs(disk_to_dev(disk));
 
 	mutex_lock(&q->sysfs_lock);
 	if (q->elevator)
 		elv_unregister_queue(q);
 	mutex_unlock(&q->sysfs_lock);
+
+	/* Now that we've deleted all child objects, we can delete the queue. */
+	kobject_uevent(&q->kobj, KOBJ_REMOVE);
+	kobject_del(&q->kobj);
+
 	mutex_unlock(&q->sysfs_dir_lock);
 
 	kobject_put(&disk_to_dev(disk)->kobj);

@@ -13,6 +13,9 @@
 #include <linux/unicode.h>
 #include <linux/ioprio.h>
 #include <linux/sysfs.h>
+#ifdef CONFIG_DEVICE_XCOPY
+#include <linux/ktime.h>
+#endif
 
 #include "f2fs.h"
 #include "segment.h"
@@ -363,7 +366,7 @@ static ssize_t __sbi_store(struct f2fs_attr *a,
 		if (strlen(name) >= F2FS_EXTENSION_LEN)
 			return -EINVAL;
 
-		down_write(&sbi->sb_lock);
+		f2fs_down_write(&sbi->sb_lock);
 
 		ret = f2fs_update_extension_list(sbi, name, hot, set);
 		if (ret)
@@ -373,7 +376,7 @@ static ssize_t __sbi_store(struct f2fs_attr *a,
 		if (ret)
 			f2fs_update_extension_list(sbi, name, hot, !set);
 out:
-		up_write(&sbi->sb_lock);
+		f2fs_up_write(&sbi->sb_lock);
 		return ret ? ret : count;
 	}
 
@@ -423,7 +426,9 @@ out:
 	if (a->struct_type == RESERVED_BLOCKS) {
 		spin_lock(&sbi->stat_lock);
 		if (t > (unsigned long)(sbi->user_block_count -
-				F2FS_OPTION(sbi).root_reserved_blocks)) {
+				F2FS_OPTION(sbi).root_reserved_blocks -
+				sbi->blocks_per_seg *
+				SM_I(sbi)->additional_reserved_segments)) {
 			spin_unlock(&sbi->stat_lock);
 			return -EINVAL;
 		}
@@ -477,7 +482,7 @@ out:
 		} else if (t == GC_IDLE_AT) {
 			if (!sbi->am.atgc_enabled)
 				return -EINVAL;
-			sbi->gc_mode = GC_AT;
+			sbi->gc_mode = GC_IDLE_AT;
 		} else {
 			sbi->gc_mode = GC_NORMAL;
 		}
@@ -546,7 +551,13 @@ out:
 		sbi->gc_reclaimed_segs[sbi->gc_segment_mode] = 0;
 		return count;
 	}
-
+#ifdef CONFIG_DEVICE_XCOPY
+	if (!strcmp(a->attr.name, "device_copy_enable")) {
+		bool *en = (bool *)(ptr + a->offset);
+		*en = !!t;  // *en = (!!t) & (*en);
+		return count;
+	}
+#endif
 	*ui = (unsigned int)t;
 
 	return count;
@@ -730,6 +741,14 @@ F2FS_STAT_ATTR(STAT_INFO, f2fs_stat_info, gc_foreground_calls, call_count);
 F2FS_STAT_ATTR(STAT_INFO, f2fs_stat_info, gc_background_calls, bg_gc);
 F2FS_GENERAL_RO_ATTR(moved_blocks_background);
 F2FS_GENERAL_RO_ATTR(moved_blocks_foreground);
+#ifdef CONFIG_DEVICE_XCOPY
+F2FS_STAT_ATTR(STAT_INFO, f2fs_stat_info, moved_blk_defragment, xcopy_defragment_blks);
+F2FS_STAT_ATTR(STAT_INFO, f2fs_stat_info, moved_xcopy_blocks, xcopy_count);
+F2FS_STAT_ATTR(STAT_INFO, f2fs_stat_info, xcopy_time_snap, time_snap);
+F2FS_STAT_ATTR(STAT_INFO, f2fs_stat_info, xcopy_time_cost_max_defrag, time_cost_max_defrag);
+F2FS_RW_ATTR(STAT_INFO, f2fs_stat_info, xcopy_time_cost_aver_defrag, time_cost_aver_defrag);
+F2FS_RW_ATTR(STAT_INFO, f2fs_stat_info, xcopy_total_fail_cnt, total_fail_cnt);
+#endif
 F2FS_GENERAL_RO_ATTR(avg_vblocks);
 #endif
 
@@ -775,6 +794,9 @@ F2FS_RW_ATTR(ATGC_INFO, atgc_management, atgc_age_threshold, age_threshold);
 
 F2FS_RW_ATTR(F2FS_SBI, f2fs_sb_info, gc_segment_mode, gc_segment_mode);
 F2FS_RW_ATTR(F2FS_SBI, f2fs_sb_info, gc_reclaimed_segments, gc_reclaimed_segs);
+#ifdef CONFIG_DEVICE_XCOPY
+F2FS_RW_ATTR(F2FS_SBI, f2fs_sb_info, device_copy_enable, device_copy_enable);
+#endif
 
 #define ATTR_LIST(name) (&f2fs_attr_##name.attr)
 static struct attribute *f2fs_attrs[] = {
@@ -837,6 +859,15 @@ static struct attribute *f2fs_attrs[] = {
 	ATTR_LIST(gc_background_calls),
 	ATTR_LIST(moved_blocks_foreground),
 	ATTR_LIST(moved_blocks_background),
+#ifdef CONFIG_DEVICE_XCOPY
+	ATTR_LIST(moved_blk_defragment),
+	ATTR_LIST(moved_xcopy_blocks),
+	ATTR_LIST(xcopy_time_snap),
+	ATTR_LIST(xcopy_time_cost_max_defrag),
+	ATTR_LIST(xcopy_time_cost_aver_defrag),
+	ATTR_LIST(xcopy_total_fail_cnt),
+	ATTR_LIST(device_copy_enable),
+#endif
 	ATTR_LIST(avg_vblocks),
 #endif
 #ifdef CONFIG_F2FS_FS_COMPRESSION
